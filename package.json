@@ -72,7 +72,7 @@
     "jsii-diff": "^1.105.0",
     "jsii-docgen": "^10.5.0",
     "jsii-pacmak": "^1.105.0",
-    "jsii-rosetta": "5.5.x",
+    "jsii-rosetta": "5.8.0",
     "license-checker": "^25.0.1",
     "markmac": "^0.1.146",
     "prettier": "^2.8.8",
