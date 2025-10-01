@@ -311,6 +311,14 @@ export class Publisher extends Component {
    * @param options Options
    */
   public publishToNpm(options: NpmPublishOptions = {}) {
+    if (options.trustedPublishing && options.npmTokenSecret) {
+      throw new Error(
+        "Cannot use npmTokenSecret when trustedPublishing is enabled. " +
+          "Trusted publishing uses OIDC tokens for authentication instead of NPM tokens. " +
+          "Remove the npmTokenSecret option to use trusted publishing."
+      );
+    }
+
     const trustedPublisher = options.trustedPublishing ? "true" : undefined;
     const npmProvenance = options.npmProvenance ? "true" : undefined;
 
@@ -417,9 +425,18 @@ export class Publisher extends Component {
    * @param options Options
    */
   public publishToNuget(options: NugetPublishOptions = {}) {
+    if (options.trustedPublishing && options.nugetApiKeySecret) {
+      throw new Error(
+        "Cannot use nugetApiKeySecret when trustedPublishing is enabled. " +
+          "Trusted publishing uses OIDC tokens for authentication instead of API keys. " +
+          "Remove the nugetApiKeySecret option to use trusted publishing."
+      );
+    }
+
     const isGitHubPackages = options.nugetServer?.startsWith(
       GITHUB_PACKAGES_NUGET_REPOSITORY
     );
+    const needsIdTokenWrite = options.trustedPublishing;
 
     this.addPublishJob(
       "nuget",
@@ -433,14 +450,25 @@ export class Publisher extends Component {
         permissions: {
           contents: JobPermission.READ,
           packages: isGitHubPackages ? JobPermission.WRITE : undefined,
+          idToken: needsIdTokenWrite ? JobPermission.WRITE : undefined,
+        },
+        env: {
+          NUGET_TRUSTED_PUBLISHER: options.trustedPublishing
+            ? "true"
+            : undefined,
         },
         workflowEnv: {
-          NUGET_API_KEY: secret(
-            isGitHubPackages
-              ? "GITHUB_TOKEN"
-              : options.nugetApiKeySecret ?? "NUGET_API_KEY"
-          ),
+          NUGET_API_KEY: options.trustedPublishing
+            ? undefined
+            : secret(
+                isGitHubPackages
+                  ? "GITHUB_TOKEN"
+                  : options.nugetApiKeySecret ?? "NUGET_API_KEY"
+              ),
           NUGET_SERVER: options.nugetServer ?? undefined,
+          NUGET_USERNAME: options.trustedPublishing
+            ? secret(options.nugetUsernameSecret ?? "NUGET_USERNAME")
+            : undefined,
         },
       })
     );
@@ -523,6 +551,17 @@ export class Publisher extends Component {
    * @param options Options
    */
   public publishToPyPi(options: PyPiPublishOptions = {}) {
+    if (
+      options.trustedPublishing &&
+      (options.twineUsernameSecret || options.twinePasswordSecret)
+    ) {
+      throw new Error(
+        "Cannot use twineUsernameSecret and twinePasswordSecret when trustedPublishing is enabled. " +
+          "Trusted publishing uses OIDC tokens for authentication instead of username/password credentials. " +
+          "Remove the twineUsernameSecret and twinePasswordSecret options to use trusted publishing."
+      );
+    }
+
     let permissions: JobPermissions = { contents: JobPermission.READ };
     const prePublishSteps = options.prePublishSteps ?? [];
     let workflowEnv: Record<string, string | undefined> = {};
@@ -1150,6 +1189,24 @@ export interface NugetPublishOptions extends CommonPublishOptions {
    *  NuGet Server URL (defaults to nuget.org)
    */
   readonly nugetServer?: string;
+
+  /**
+   * Use NuGet trusted publishing instead of API keys.
+   *
+   * Needs to be setup in NuGet.org.
+   *
+   * @see https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing
+   */
+  readonly trustedPublishing?: boolean;
+
+  /**
+   * The NuGet.org username (profile name, not email address) for trusted publisher authentication.
+   *
+   * Required when using trusted publishing.
+   *
+   * @default "NUGET_USERNAME"
+   */
+  readonly nugetUsernameSecret?: string;
 }
 
 /**
